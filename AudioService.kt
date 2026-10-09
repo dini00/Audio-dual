@@ -33,6 +33,7 @@ class AudioService : Service() {
     }
 
     private var projection: MediaProjection? = null
+    private var projCallback: MediaProjection.Callback? = null
     private var record: AudioRecord? = null
     private val tracks = mutableListOf<Pair<String, AudioTrack>>()
     private var worker: Thread? = null
@@ -94,6 +95,7 @@ class AudioService : Service() {
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_GAME)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
                     .build())
             .setAudioFormat(outFmt)
             .setBufferSizeInBytes(minOut * 2)
@@ -117,10 +119,13 @@ class AudioService : Service() {
 
     private fun startBridge(code: Int, data: Intent, wiredId: Int, btId: Int) {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        releaseBridge()
         val proj = mpm.getMediaProjection(code, data)
-        proj.registerCallback(object : MediaProjection.Callback() {
+        val cb = object : MediaProjection.Callback() {
             override fun onStop() { stopAll() }
-        }, Handler(Looper.getMainLooper()))
+        }
+        proj.registerCallback(cb, Handler(Looper.getMainLooper()))
+        projCallback = cb
         projection = proj
 
         val cfg = AudioPlaybackCaptureConfiguration.Builder(proj)
@@ -177,7 +182,7 @@ class AudioService : Service() {
         }, 1500)
     }
 
-    private fun stopAll() {
+    private fun releaseBridge() {
         running = false
         try { worker?.join(300) } catch (_: Exception) {}
         try { record?.stop() } catch (_: Exception) {}
@@ -187,8 +192,17 @@ class AudioService : Service() {
             try { t.release() } catch (_: Exception) {}
         }
         tracks.clear()
-        try { projection?.stop() } catch (_: Exception) {}
-        record = null; projection = null; worker = null
+        val pr = projection
+        val cb = projCallback
+        if (pr != null && cb != null) {
+            try { pr.unregisterCallback(cb) } catch (_: Exception) {}
+        }
+        try { pr?.stop() } catch (_: Exception) {}
+        record = null; projection = null; projCallback = null; worker = null
+    }
+
+    private fun stopAll() {
+        releaseBridge()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
