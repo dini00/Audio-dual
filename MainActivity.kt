@@ -27,6 +27,17 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private var devices: List<AudioDeviceInfo> = emptyList()
 
+    private val allowedTypes = setOf(
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_BLE_BROADCAST
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -42,10 +53,8 @@ class MainActivity : Activity() {
             textSize = 26f
         }
         val info = TextView(this).apply {
-            text = "1) Wired headphones lagao\n2) Bluetooth speaker/earbuds phone se connect karo\n" +
-                "3) Neeche device chuno aur Start dabao.\n\n" +
-                "Phone ka audio wired me chalta rahega aur Bluetooth pe bhi jayega " +
-                "(Bluetooth me thoda delay hoga)."
+            text = "Wired aur Bluetooth dono connect karo, phir jis device pe " +
+                "audio ki copy bhejni hai wo chuno aur Start dabao."
             textSize = 15f
             setPadding(0, pad / 2, 0, pad / 2)
         }
@@ -61,8 +70,10 @@ class MainActivity : Activity() {
         val stop = Button(this).apply {
             text = "Stop"
             setOnClickListener {
-                startService(Intent(this@MainActivity, AudioService::class.java)
-                    .setAction(AudioService.ACTION_STOP))
+                startService(
+                    Intent(this@MainActivity, AudioService::class.java)
+                        .setAction(AudioService.ACTION_STOP)
+                )
                 status.text = "Band kar diya"
             }
         }
@@ -76,27 +87,30 @@ class MainActivity : Activity() {
         loadDevices()
     }
 
+    private fun typeName(t: Int): String = when (t) {
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired headphones"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired headset"
+        AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "USB device"
+        else -> "Bluetooth"
+    }
+
     private fun loadDevices() {
         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter {
-            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-                it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
-                it.type == AudioDeviceInfo.TYPE_BLE_BROADCAST
-            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || 
-            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || 
-            it.type == AudioDeviceInfo.TYPE_USB_HEADSET || 
-            it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+        devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .filter { allowedTypes.contains(it.type) }
+        val names = if (devices.isEmpty()) {
+            listOf("Koi device nahi mila")
+        } else {
+            devices.map { "${typeName(it.type)}: ${it.productName} (id ${it.id})" }
         }
-        val names = if (devices.isEmpty()) listOf("Koi Bluetooth device nahi mila")
-        else devices.map { "${it.productName} (id ${it.id})" }
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
     }
 
     private fun onStartClicked() {
         loadDevices()
         if (devices.isEmpty()) {
-            Toast.makeText(this, "Pehle Bluetooth device connect karo", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Pehle koi device connect karo", Toast.LENGTH_LONG).show()
             return
         }
         val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
