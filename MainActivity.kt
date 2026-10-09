@@ -11,10 +11,9 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
-import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 
@@ -23,15 +22,20 @@ class MainActivity : Activity() {
     private val REQ_PERM = 1
     private val REQ_CAPTURE = 2
 
-    private lateinit var spinner: Spinner
+    private lateinit var cbWired: CheckBox
+    private lateinit var cbBt: CheckBox
     private lateinit var status: TextView
-    private var devices: List<AudioDeviceInfo> = emptyList()
 
-    private val allowedTypes = setOf(
+    private var wiredDev: AudioDeviceInfo? = null
+    private var btDev: AudioDeviceInfo? = null
+
+    private val wiredTypes = setOf(
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET,
         AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_DEVICE
+    )
+    private val btTypes = setOf(
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_BLE_HEADSET,
         AudioDeviceInfo.TYPE_BLE_SPEAKER,
@@ -53,12 +57,14 @@ class MainActivity : Activity() {
             textSize = 26f
         }
         val info = TextView(this).apply {
-            text = "Wired aur Bluetooth dono connect karo, phir jis device pe " +
-                "audio ki copy bhejni hai wo chuno aur Start dabao."
+            text = "Jis device pe audio ki copy bhejni hai usko tick karo. " +
+                "Dono tick karoge to dono pe copy jayegi."
             textSize = 15f
             setPadding(0, pad / 2, 0, pad / 2)
         }
-        spinner = Spinner(this)
+        cbWired = CheckBox(this).apply { text = "Headphone (wired / USB)"; textSize = 18f }
+        cbBt = CheckBox(this).apply { text = "Bluetooth"; textSize = 18f }
+
         val refresh = Button(this).apply {
             text = "Devices refresh karo"
             setOnClickListener { loadDevices() }
@@ -75,6 +81,7 @@ class MainActivity : Activity() {
                         .setAction(AudioService.ACTION_STOP)
                 )
                 status.text = "Band kar diya"
+                loadDevices()
             }
         }
         status = TextView(this).apply {
@@ -82,35 +89,27 @@ class MainActivity : Activity() {
             setPadding(0, pad, 0, 0)
         }
 
-        listOf(title, info, spinner, refresh, start, stop, status).forEach { root.addView(it) }
+        listOf(title, info, cbWired, cbBt, refresh, start, stop, status).forEach { root.addView(it) }
         setContentView(root)
         loadDevices()
     }
 
-    private fun typeName(t: Int): String = when (t) {
-        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired headphones"
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired headset"
-        AudioDeviceInfo.TYPE_USB_HEADSET -> "USB headset"
-        AudioDeviceInfo.TYPE_USB_DEVICE -> "USB device"
-        else -> "Bluetooth"
-    }
-
     private fun loadDevices() {
         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .filter { allowedTypes.contains(it.type) }
-        val names = if (devices.isEmpty()) {
-            listOf("Koi device nahi mila")
-        } else {
-            devices.map { "${typeName(it.type)}: ${it.productName} (id ${it.id})" }
-        }
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        val outs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        wiredDev = outs.firstOrNull { wiredTypes.contains(it.type) }
+        btDev = outs.firstOrNull { btTypes.contains(it.type) }
+
+        cbWired.text = "Headphone: " + (wiredDev?.productName ?: "nahi mila")
+        cbBt.text = "Bluetooth: " + (btDev?.productName ?: "nahi mila")
+        if (wiredDev == null) cbWired.isChecked = false
+        if (btDev == null) cbBt.isChecked = false
     }
 
     private fun onStartClicked() {
         loadDevices()
-        if (devices.isEmpty()) {
-            Toast.makeText(this, "Pehle koi device connect karo", Toast.LENGTH_LONG).show()
+        if (!cbWired.isChecked && !cbBt.isChecked) {
+            Toast.makeText(this, "Kam se kam ek device tick karo", Toast.LENGTH_LONG).show()
             return
         }
         val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
@@ -142,15 +141,24 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_CAPTURE) {
-            if (resultCode == RESULT_OK && data != null && devices.isNotEmpty()) {
-                val dev = devices[spinner.selectedItemPosition.coerceIn(0, devices.size - 1)]
+            if (resultCode == RESULT_OK && data != null) {
+                val wId = if (cbWired.isChecked) wiredDev?.id ?: -1 else -1
+                val bId = if (cbBt.isChecked) btDev?.id ?: -1 else -1
+                if (wId == -1 && bId == -1) {
+                    status.text = "Tick kiya hua device connect nahi hai"
+                    return
+                }
                 val i = Intent(this, AudioService::class.java).apply {
                     putExtra("code", resultCode)
                     putExtra("data", data)
-                    putExtra("deviceId", dev.id)
+                    putExtra("wiredId", wId)
+                    putExtra("btId", bId)
                 }
                 startForegroundService(i)
-                status.text = "Chal raha hai: ${dev.productName}"
+                val parts = mutableListOf<String>()
+                if (wId != -1) parts += "Headphone"
+                if (bId != -1) parts += "Bluetooth"
+                status.text = "Chal raha hai: " + parts.joinToString(" + ")
             } else {
                 status.text = "Permission nahi mili"
             }
