@@ -83,6 +83,10 @@ class MainActivity : Activity() {
                 it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
                 it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
                 it.type == AudioDeviceInfo.TYPE_BLE_BROADCAST
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || 
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || 
+            it.type == AudioDeviceInfo.TYPE_USB_HEADSET || 
+            it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
         }
         val names = if (devices.isEmpty()) listOf("Koi Bluetooth device nahi mila")
         else devices.map { "${it.productName} (id ${it.id})" }
