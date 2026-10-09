@@ -5,10 +5,15 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
@@ -73,6 +78,10 @@ class MainActivity : Activity() {
             text = "Start"
             setOnClickListener { onStartClicked() }
         }
+        val test = Button(this).apply {
+            text = "Test tone (dono device)"
+            setOnClickListener { playTestTone() }
+        }
         val stop = Button(this).apply {
             text = "Stop"
             setOnClickListener {
@@ -89,7 +98,7 @@ class MainActivity : Activity() {
             setPadding(0, pad, 0, 0)
         }
 
-        listOf(title, info, cbWired, cbBt, refresh, start, stop, status).forEach { root.addView(it) }
+        listOf(title, info, cbWired, cbBt, refresh, start, stop, test, status).forEach { root.addView(it) }
         setContentView(root)
         loadDevices()
     }
@@ -104,6 +113,59 @@ class MainActivity : Activity() {
         cbBt.text = "Bluetooth: " + (btDev?.productName ?: "nahi mila")
         if (wiredDev == null) cbWired.isChecked = false
         if (btDev == null) cbBt.isChecked = false
+    }
+
+    private fun makeToneTrack(dev: AudioDeviceInfo, freq: Double): AudioTrack {
+        val rate = 44100
+        val n = rate * 6
+        val data = ShortArray(n) { i ->
+            (Math.sin(2.0 * Math.PI * freq * i / rate) * 9000).toInt().toShort()
+        }
+        val trk = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(rate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(n * 2)
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .build()
+        trk.write(data, 0, n)
+        trk.preferredDevice = dev
+        return trk
+    }
+
+    private fun playTestTone() {
+        loadDevices()
+        val w = wiredDev
+        val b = btDev
+        if (w == null || b == null) {
+            Toast.makeText(this, "Pehle headphone aur Bluetooth dono connect karo", Toast.LENGTH_LONG).show()
+            return
+        }
+        val low = makeToneTrack(w, 440.0)
+        val high = makeToneTrack(b, 880.0)
+        low.play()
+        high.play()
+        status.text = "Test chal raha hai (6 sec): headphone ko LOW aawaz, Bluetooth ko HIGH aawaz"
+        Handler(Looper.getMainLooper()).postDelayed({
+            val rw = low.routedDevice?.productName ?: "pata nahi"
+            val rb = high.routedDevice?.productName ?: "pata nahi"
+            Toast.makeText(this, "Low -> $rw | High -> $rb", Toast.LENGTH_LONG).show()
+        }, 800)
+        Handler(Looper.getMainLooper()).postDelayed({
+            try { low.stop(); low.release() } catch (_: Exception) {}
+            try { high.stop(); high.release() } catch (_: Exception) {}
+            status.text = "Test khatam"
+        }, 6500)
     }
 
     private fun onStartClicked() {
