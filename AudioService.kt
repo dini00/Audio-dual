@@ -92,7 +92,7 @@ class AudioService : Service() {
         val trk = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(AudioAttributes.USAGE_GAME)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build())
             .setAudioFormat(outFmt)
@@ -125,7 +125,6 @@ class AudioService : Service() {
 
         val cfg = AudioPlaybackCaptureConfiguration.Builder(proj)
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-            .addMatchingUsage(AudioAttributes.USAGE_GAME)
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
             .excludeUid(Process.myUid())
             .build()
